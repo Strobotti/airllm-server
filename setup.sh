@@ -11,8 +11,6 @@ AIRLLM_DIR="$REPO_DIR/airllm"
 PACKAGES=("git" "python3" "python3-dev" "python3-pip" "python3-venv" "wget" "curl")
 TO_INSTALL=()
 KEYRING_URL=""
-CUDA_VERSION="12-6"
-PYTORCH_CUDA_INDEX="https://download.pytorch.org/whl/cu126"
 APT_GET=""
 
 ###############################################
@@ -95,7 +93,7 @@ install_base_packages() {
 }
 
 ###############################################
-# Install CUDA Toolkit 12.6
+# Install CUDA Toolkit
 ###############################################
 install_cuda() {
     # Install keyring if missing
@@ -118,12 +116,12 @@ install_cuda() {
         echo "CUDA keyring already installed — skipping."
     fi
 
-    # Install CUDA toolkit
-    if ! dpkg-query -W -f='${Status}' "cuda-toolkit-${CUDA_VERSION}" 2>/dev/null | grep -q "install ok installed"; then
-        echo "Installing cuda-toolkit-${CUDA_VERSION}..."
-        sudo "$APT_GET" install -y cuda-toolkit-${CUDA_VERSION}
+    # Install CUDA toolkit (latest available version)
+    if ! dpkg-query -W -f='${Status}' "cuda-toolkit" 2>/dev/null | grep -q "install ok installed"; then
+        echo "Installing cuda-toolkit..."
+        sudo "$APT_GET" install -y cuda-toolkit
     else
-        echo "cuda-toolkit-${CUDA_VERSION} already installed — skipping."
+        echo "cuda-toolkit already installed — skipping."
     fi
 
     # Add PATH only for native Linux
@@ -138,11 +136,38 @@ install_cuda() {
 }
 
 ###############################################
-# Install PyTorch (CUDA 12.6 wheel)
+# Detect installed CUDA version for PyTorch
+###############################################
+get_pytorch_cuda_index() {
+    local cuda_ver
+    if command -v nvcc &>/dev/null; then
+        cuda_ver=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+')
+    elif [ -f /usr/local/cuda/version.txt ]; then
+        cuda_ver=$(grep -oP '[0-9]+\.[0-9]+' /usr/local/cuda/version.txt | head -1)
+    else
+        # Fallback: check the cuda-toolkit package version
+        cuda_ver=$(dpkg-query -W -f='${Version}' cuda-toolkit 2>/dev/null | grep -oP '^[0-9]+\.[0-9]+')
+    fi
+
+    if [ -z "$cuda_ver" ]; then
+        echo "Warning: Could not detect CUDA version, defaulting to cu126" >&2
+        echo "https://download.pytorch.org/whl/cu126"
+        return
+    fi
+
+    # Convert "13.3" -> "cu133", "12.6" -> "cu126"
+    local cu_tag="cu${cuda_ver//./}"
+    echo "https://download.pytorch.org/whl/${cu_tag}"
+}
+
+###############################################
+# Install PyTorch (matching CUDA version)
 ###############################################
 install_pytorch() {
-    echo "Installing PyTorch (CUDA 12.6 wheel)..."
-    pip install torch --index-url "$PYTORCH_CUDA_INDEX"
+    local pytorch_index
+    pytorch_index=$(get_pytorch_cuda_index)
+    echo "Installing PyTorch from: $pytorch_index"
+    pip install torch --index-url "$pytorch_index"
 }
 
 ###############################################
