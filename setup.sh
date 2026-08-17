@@ -155,8 +155,27 @@ get_pytorch_cuda_index() {
         return
     fi
 
-    # Convert "13.3" -> "cu133", "12.6" -> "cu126"
-    local cu_tag="cu${cuda_ver//./}"
+    local major minor
+    major="${cuda_ver%%.*}"
+    minor="${cuda_ver#*.}"
+
+    # Map to the nearest available PyTorch wheel index.
+    # PyTorch publishes wheels for specific CUDA versions only:
+    #   CUDA 13.x -> cu130 (stable for CUDA 13 family)
+    #   CUDA 12.6-12.8 -> cu126
+    #   CUDA 12.0-12.5 -> cu121
+    #   CUDA 11.x -> cu118
+    local cu_tag
+    if [ "$major" -ge 13 ]; then
+        cu_tag="cu130"
+    elif [ "$major" -eq 12 ] && [ "$minor" -ge 6 ]; then
+        cu_tag="cu126"
+    elif [ "$major" -eq 12 ]; then
+        cu_tag="cu121"
+    else
+        cu_tag="cu118"
+    fi
+
     echo "https://download.pytorch.org/whl/${cu_tag}"
 }
 
