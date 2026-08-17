@@ -9,7 +9,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from airllm import AutoModelForCausalLM
+from airllm import AutoModel
 import torch
 
 # ---------------------------------------------------------
@@ -98,11 +98,9 @@ async def get_or_load_model(model_name: str):
 
         log.info(f"[model] Loading model: {model_name}")
         try:
-            llm = AutoModelForCausalLM.from_pretrained(
+            llm = AutoModel.from_pretrained(
                 model_name,
-                load_in_4bit=True,
-                use_flash_attention=True,
-                device_map="auto",
+                compression='4bit',
             )
         except Exception as e:
             log.exception(f"[model] Failed to load model {model_name}: {e}")
@@ -145,13 +143,42 @@ def estimate_tokens(text: str) -> int:
     return len(text.split())
 
 
+MAX_INPUT_LENGTH = 512
+
+
+def run_inference(llm, prompt: str, max_tokens: int) -> str:
+    """Tokenize, generate, and decode using the current AirLLM API."""
+    input_tokens = llm.tokenizer(
+        [prompt],
+        return_tensors="pt",
+        return_attention_mask=False,
+        truncation=True,
+        max_length=MAX_INPUT_LENGTH,
+        padding=False,
+    )
+    generation_output = llm.generate(
+        input_tokens['input_ids'].cuda(),
+        max_new_tokens=max_tokens,
+        use_cache=True,
+        return_dict_in_generate=True,
+    )
+    output_text = llm.tokenizer.decode(
+        generation_output.sequences[0],
+        skip_special_tokens=True,
+    )
+    # Strip the input prompt from the output if echoed
+    if output_text.startswith(prompt):
+        output_text = output_text[len(prompt):].strip()
+    return output_text
+
+
 # ---------------------------------------------------------
 # Streaming generator
 # ---------------------------------------------------------
 async def stream_generator(llm, prompt: str, max_tokens: int, request_id: str):
     start = time.time()
     try:
-        output = llm.generate(prompt, max_new_tokens=max_tokens)
+        output = run_inference(llm, prompt, max_tokens)
     except Exception as e:
         log.exception(f"[{request_id}] Inference error: {e}")
         yield b'data: {"error": "inference_error"}\n\n'
@@ -220,7 +247,7 @@ async def chat(
 
     start = time.time()
     try:
-        output = llm.generate(prompt, max_new_tokens=max_tokens)
+        output = run_inference(llm, prompt, max_tokens)
     except Exception as e:
         log.exception(f"[{request_id}] Inference error: {e}")
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
