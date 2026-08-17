@@ -13,6 +13,21 @@ TO_INSTALL=()
 KEYRING_URL=""
 CUDA_VERSION="12-6"
 PYTORCH_CUDA_INDEX="https://download.pytorch.org/whl/cu126"
+APT_GET=""
+
+###############################################
+# Detect package manager (apt-get or apt)
+###############################################
+detect_apt() {
+    if command -v apt-get &>/dev/null; then
+        APT_GET="apt-get"
+    elif command -v apt &>/dev/null; then
+        APT_GET="apt"
+    else
+        echo "Error: Neither apt-get nor apt found. This script requires a Debian-based system."
+        exit 1
+    fi
+}
 
 ###############################################
 # Detect WSL
@@ -74,8 +89,8 @@ install_base_packages() {
 
     if [ ${#TO_INSTALL[@]} -gt 0 ]; then
         echo "Installing packages: ${TO_INSTALL[*]}"
-        sudo apt-get update
-        sudo apt-get install -y "${TO_INSTALL[@]}"
+        sudo "$APT_GET" update
+        sudo "$APT_GET" install -y "${TO_INSTALL[@]}"
     fi
 }
 
@@ -87,13 +102,18 @@ install_cuda() {
     if ! dpkg-query -W -f='${Status}' "cuda-keyring" 2>/dev/null | grep -q "install ok installed"; then
         echo "Installing CUDA keyring..."
 
-        # Remove the old key
-        sudo apt-key del 7fa2af80
+        # Remove the old NVIDIA key if present (apt-key is deprecated/removed in newer Ubuntu)
+        if command -v apt-key &>/dev/null; then
+            sudo apt-key del 7fa2af80 2>/dev/null || true
+        else
+            # Remove legacy trusted key files directly
+            sudo rm -f /etc/apt/trusted.gpg.d/cuda*.gpg 2>/dev/null || true
+        fi
 
         wget -q "$KEYRING_URL" -O cuda-keyring.deb
         sudo dpkg -i cuda-keyring.deb
         rm cuda-keyring.deb
-        sudo apt-get update
+        sudo "$APT_GET" update
     else
         echo "CUDA keyring already installed — skipping."
     fi
@@ -101,7 +121,7 @@ install_cuda() {
     # Install CUDA toolkit
     if ! dpkg-query -W -f='${Status}' "cuda-toolkit-${CUDA_VERSION}" 2>/dev/null | grep -q "install ok installed"; then
         echo "Installing cuda-toolkit-${CUDA_VERSION}..."
-        sudo apt-get install -y cuda-toolkit-${CUDA_VERSION}
+        sudo "$APT_GET" install -y cuda-toolkit-${CUDA_VERSION}
     else
         echo "cuda-toolkit-${CUDA_VERSION} already installed — skipping."
     fi
@@ -144,6 +164,8 @@ install_airllm() {
 # MAIN
 ###############################################
 echo "Installing into repo directory: $REPO_DIR"
+
+detect_apt
 
 if ! get_distro_settings; then
     exit 1
