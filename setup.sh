@@ -6,7 +6,6 @@ set -e
 ###############################################
 REPO_DIR="$(pwd)"              # Install where the repo was cloned
 VENV_DIR="$REPO_DIR/.venv"
-AIRLLM_DIR="$REPO_DIR/airllm"
 
 PACKAGES=("git" "python3" "python3-dev" "python3-pip" "python3-venv" "wget" "curl")
 TO_INSTALL=()
@@ -194,13 +193,6 @@ install_pytorch() {
 ###############################################
 install_airllm() {
     echo "Installing AirLLM + dependencies..."
-
-    if [ ! -d "$AIRLLM_DIR" ]; then
-        git submodule add https://github.com/lyogavin/airllm.git "$AIRLLM_DIR" || true
-    else
-        git submodule update --init --recursive
-    fi
-
     pip install -r "$REPO_DIR/requirements.txt"
 }
 
