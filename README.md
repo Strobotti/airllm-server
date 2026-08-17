@@ -87,18 +87,24 @@ cd airllm-server
 
 ## Model Configuration
 
-The server loads a model via AirLLM:
+The server loads a model via AirLLM. The default model is configured via the
+`AIRLLM_DEFAULT_MODEL` environment variable:
 
-```python
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+```bash
+export AIRLLM_DEFAULT_MODEL="Qwen/Qwen2.5-7B-Instruct"
 ```
 
-You can replace this with any supported model, such as:
+You can use any supported model, such as:
 
-* meta-llama/Meta-Llama-3-8B-Instruct
-* Qwen/Qwen2.5-7B-Instruct
+* Qwen/Qwen2.5-7B-Instruct (default — ungated, no auth required)
 * mistralai/Mistral-7B-Instruct-v0.3
-* meta-llama/Meta-Llama-3-70B-Instruct (if VRAM allows)
+* meta-llama/Meta-Llama-3-8B-Instruct (gated — requires HF token)
+* meta-llama/Meta-Llama-3-70B-Instruct (gated — requires HF token)
+
+For gated models (e.g. Llama), you must:
+
+1. Accept the model license on HuggingFace
+2. Set your HuggingFace token: `export HF_TOKEN="hf_your_token_here"`
 
 AirLLM automatically applies memory‑saving optimizations.
 

@@ -24,13 +24,14 @@ log = logging.getLogger("airllm-server")
 # ---------------------------------------------------------
 # Config
 # ---------------------------------------------------------
-DEFAULT_MODEL = os.getenv("AIRLLM_DEFAULT_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
+DEFAULT_MODEL = os.getenv("AIRLLM_DEFAULT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 API_KEY = os.getenv("AIRLLM_API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 AVAILABLE_MODELS = [
+    "Qwen/Qwen2.5-7B-Instruct",
     "meta-llama/Meta-Llama-3-8B-Instruct",
     "meta-llama/Meta-Llama-3-70B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
     "mistralai/Mistral-7B-Instruct-v0.3",
 ]
 
@@ -98,10 +99,10 @@ async def get_or_load_model(model_name: str):
 
         log.info(f"[model] Loading model: {model_name}")
         try:
-            llm = AutoModel.from_pretrained(
-                model_name,
-                compression='4bit',
-            )
+            kwargs = {"compression": "4bit"}
+            if HF_TOKEN:
+                kwargs["hf_token"] = HF_TOKEN
+            llm = AutoModel.from_pretrained(model_name, **kwargs)
         except Exception as e:
             log.exception(f"[model] Failed to load model {model_name}: {e}")
             raise HTTPException(status_code=500, detail=f"Model load error: {str(e)}")
@@ -113,8 +114,14 @@ async def get_or_load_model(model_name: str):
 
 @app.on_event("startup")
 async def startup_event():
-    await get_or_load_model(DEFAULT_MODEL)
-    log.info(f"[startup] Default model ready: {DEFAULT_MODEL}")
+    try:
+        await get_or_load_model(DEFAULT_MODEL)
+        log.info(f"[startup] Default model ready: {DEFAULT_MODEL}")
+    except Exception as e:
+        log.warning(
+            f"[startup] Could not preload default model '{DEFAULT_MODEL}': {e}. "
+            f"The server will start anyway — models will be loaded on first request."
+        )
 
 
 # ---------------------------------------------------------
